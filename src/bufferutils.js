@@ -1,29 +1,39 @@
 'use strict';
 Object.defineProperty(exports, '__esModule', { value: true });
-exports.BufferReader = exports.BufferWriter = exports.cloneBuffer = exports.reverseBuffer = exports.writeUInt64LE = exports.readUInt64LE = exports.varuint = void 0;
+exports.BufferReader =
+  exports.BufferWriter =
+  exports.cloneBuffer =
+  exports.reverseBuffer =
+  exports.writeUInt64LE =
+  exports.readUInt64LE =
+  exports.varuint =
+    void 0;
 const types = require('./types');
+const { typeforce } = types;
 const varuint = require('varuint-bitcoin');
-const bn = require('big-integer');
 exports.varuint = varuint;
 // https://github.com/feross/buffer/blob/master/index.js#L1127
 function verifuint(value, max) {
-  if (!bn.isInstance(value))
-    throw new Error('cannot write a non-bigint as a number');
-  if (value.lesser(bn(0)))
+  if (typeof value !== 'number')
+    throw new Error('cannot write a non-number as a number');
+  if (value < 0)
     throw new Error('specified a negative value for writing an unsigned value');
-  if (value.greater(max)) throw new Error('RangeError: value out of range');
+  if (value > max) throw new Error('RangeError: value out of range');
+  if (Math.floor(value) !== value)
+    throw new Error('value has a fractional component');
 }
 function readUInt64LE(buffer, offset) {
-  const a = bn(buffer.readUInt32LE(offset));
-  let b = bn(buffer.readUInt32LE(offset + 4)).shiftLeft(bn(32));
-  verifuint(b.add(a), (bn(10).pow(bn(18))).subtract(bn(1)));
-  return b.add(a);
+  const a = buffer.readUInt32LE(offset);
+  let b = buffer.readUInt32LE(offset + 4);
+  b *= 0x100000000;
+  verifuint(b + a, 0x001fffffffffffff);
+  return b + a;
 }
 exports.readUInt64LE = readUInt64LE;
 function writeUInt64LE(buffer, value, offset) {
-  verifuint(value, (bn(10).pow(bn(18))).subtract(bn(1)));
-  buffer.writeUInt32LE(parseInt(value.and(bn(0xffffffff))), offset);
-  buffer.writeUInt32LE(parseInt(value.shiftRight(bn(32))), offset + 4);
+  verifuint(value, 0x001fffffffffffff);
+  buffer.writeInt32LE(value & -1, offset);
+  buffer.writeUInt32LE(Math.floor(value / 0x100000000), offset + 4);
   return offset + 8;
 }
 exports.writeUInt64LE = writeUInt64LE;
@@ -50,12 +60,13 @@ exports.cloneBuffer = cloneBuffer;
  * Helper class for serialization of bitcoin data types into a pre-allocated buffer.
  */
 class BufferWriter {
+  static withCapacity(size) {
+    return new BufferWriter(Buffer.alloc(size));
+  }
   constructor(buffer, offset = 0) {
     this.buffer = buffer;
     this.offset = offset;
-  }
-  static withCapacity(size) {
-    return new BufferWriter(Buffer.alloc(size));
+    typeforce(types.tuple(types.Buffer, types.UInt32), [buffer, offset]);
   }
   writeUInt8(i) {
     this.offset = this.buffer.writeUInt8(i, this.offset);
@@ -102,6 +113,7 @@ class BufferReader {
   constructor(buffer, offset = 0) {
     this.buffer = buffer;
     this.offset = offset;
+    typeforce(types.tuple(types.Buffer, types.UInt32), [buffer, offset]);
   }
   readUInt8() {
     const result = this.buffer.readUInt8(this.offset);
