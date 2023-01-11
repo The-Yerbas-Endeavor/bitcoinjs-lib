@@ -3,7 +3,7 @@ Object.defineProperty(exports, '__esModule', { value: true });
 exports.encode = exports.decode = void 0;
 const bip66 = require('./bip66');
 const types = require('./types');
-const Buffer = require('safe-buffer').Buffer;
+const { typeforce } = types;
 const ZERO = Buffer.alloc(1, 0);
 function toDER(x) {
   let i = 0;
@@ -34,6 +34,13 @@ function decode(buffer) {
 }
 exports.decode = decode;
 function encode(signature, hashType) {
+  typeforce(
+    {
+      signature: types.BufferN(64),
+      hashType: types.UInt8,
+    },
+    { signature, hashType },
+  );
   const hashTypeMod = hashType & ~0x80;
   if (hashTypeMod <= 0 || hashTypeMod >= 4)
     throw new Error('Invalid hashType ' + hashType);
